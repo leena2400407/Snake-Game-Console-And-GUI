@@ -1,0 +1,659 @@
+#pragma once
+
+#include <cstdlib>
+#include <ctime>
+
+namespace snake_GUI {
+
+	using namespace System;
+	using namespace System::ComponentModel;
+	using namespace System::Collections;
+	using namespace System::Windows::Forms;
+	using namespace System::Data;
+	using namespace System::Drawing;
+	using namespace System::Drawing::Drawing2D;
+
+	public ref class GUI : public System::Windows::Forms::Form
+	{
+	public:
+		enum class Direction { Stop, Up, Down, Left, Right };
+		bool game_over = false;
+		ref struct GameModifiers {
+			bool portals;
+			bool speedFood;
+			bool enhancedFood;
+			bool wrapMode;
+			bool christmas;
+
+			GameModifiers() {
+				portals = true;
+				speedFood = true;
+				enhancedFood = true;
+				wrapMode = true;
+				christmas = false;
+			}
+		};
+
+		GUI(void)
+		{
+			InitializeComponent();
+			InitializeGame();
+		}
+
+	protected:
+		~GUI()
+		{
+			if (components) delete components;
+		}
+
+		// Handle Input
+		virtual bool ProcessCmdKey(System::Windows::Forms::Message% msg, System::Windows::Forms::Keys keyData) override
+		{
+			if (pnlMenu->Visible || pnlExtras->Visible)
+				return Form::ProcessCmdKey(msg, keyData);
+
+			Direction newDir = currentDir;
+			bool isDirectionKey = false;
+			
+			if (!game_over) {
+				if (keyData == Keys::W) { if (currentDir != Direction::Down) newDir = Direction::Up; isDirectionKey = true; }
+				else if (keyData == Keys::S) { if (currentDir != Direction::Up) newDir = Direction::Down; isDirectionKey = true; }
+				else if (keyData == Keys::A) { if (currentDir != Direction::Right) newDir = Direction::Left; isDirectionKey = true; }
+				else if (keyData == Keys::D) { if (currentDir != Direction::Left) newDir = Direction::Right; isDirectionKey = true; }
+
+			}
+			
+			if (isDirectionKey) {
+				if (!isGameRunning) {
+					isGameRunning = true;
+					currentDir = newDir;
+					gameTimer->Start();
+				}
+				else if (newDir != currentDir) nextDir = newDir;
+				return true;
+			}
+			return Form::ProcessCmdKey(msg, keyData);
+		}
+
+	private:
+		Timer^ gameTimer;
+		Timer^ portalTimer;
+		Timer^ SpeedTimer;
+		PictureBox^ gameCanvas;
+		Label^ lblScore;
+		Panel^ pnlMenu;
+		Button^ btnStart;
+		Button^ btnExtras;
+		Button^ btnExit;
+		Label^ lblTitle;
+		Panel^ pnlExtras;
+		CheckBox^ chkPortals;
+		CheckBox^ chkSpeedFood;
+		CheckBox^ chkEnhanced;
+		CheckBox^ chkWrap;
+		CheckBox^ chkchristmas;
+		Button^ btnBack;
+		Label^ lblGameOver;
+		IContainer^ components;
+
+		static const int WIDTH = 10;
+		static const int HEIGHT = 10;
+		static const int CELL_SIZE = 40;
+
+		array<int, 2>^ snake;
+		int snakeLength;
+		Direction currentDir;
+		Direction nextDir;
+		bool isGameRunning;
+		int score;
+		int foodX, foodY, foodType;
+		int portal1X, portal1Y, portal2X, portal2Y;
+		int lastfoodeaten;
+		bool portalsActive;
+		bool SpeedBoostActice;
+		GameModifiers^ mods;
+		Random^ rand;
+
+#pragma region
+		void InitializeComponent(void)
+		{
+			this->components = (gcnew System::ComponentModel::Container());
+			this->gameTimer = (gcnew System::Windows::Forms::Timer(this->components));
+			this->portalTimer = (gcnew System::Windows::Forms::Timer(this->components));
+			this->SpeedTimer = (gcnew System::Windows::Forms::Timer(this->components));
+			this->gameCanvas = (gcnew System::Windows::Forms::PictureBox());
+			this->lblScore = (gcnew System::Windows::Forms::Label());
+			this->pnlMenu = (gcnew System::Windows::Forms::Panel());
+			this->btnExit = (gcnew System::Windows::Forms::Button());
+			this->btnExtras = (gcnew System::Windows::Forms::Button());
+			this->btnStart = (gcnew System::Windows::Forms::Button());
+			this->lblTitle = (gcnew System::Windows::Forms::Label());
+			this->pnlExtras = (gcnew System::Windows::Forms::Panel());
+			this->btnBack = (gcnew System::Windows::Forms::Button());
+			this->chkWrap = (gcnew System::Windows::Forms::CheckBox());
+			this->chkEnhanced = (gcnew System::Windows::Forms::CheckBox());
+			this->chkSpeedFood = (gcnew System::Windows::Forms::CheckBox());
+			this->chkchristmas = (gcnew System::Windows::Forms::CheckBox());
+			this->chkPortals = (gcnew System::Windows::Forms::CheckBox());
+			this->lblGameOver = (gcnew System::Windows::Forms::Label());
+			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->gameCanvas))->BeginInit();
+			this->pnlMenu->SuspendLayout();
+			this->pnlExtras->SuspendLayout();
+			this->SuspendLayout();
+			
+			this->gameTimer->Interval = 400;
+			this->gameTimer->Tick += gcnew System::EventHandler(this, &GUI::GameTick);
+			
+			this->portalTimer->Interval = 10000;
+			this->portalTimer->Tick += gcnew System::EventHandler(this, &GUI::OnPortalTimerTick);
+			
+			this->SpeedTimer->Interval = 5000;
+			this->SpeedTimer->Tick += gcnew System::EventHandler(this, &GUI::SpeedBoostTimer);
+			// 
+			// gameCanvas
+			// 
+			this->gameCanvas->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(10)), static_cast<System::Int32>(static_cast<System::Byte>(10)),
+				static_cast<System::Int32>(static_cast<System::Byte>(10)));
+			this->gameCanvas->Location = System::Drawing::Point(20, 50);
+			this->gameCanvas->Name = L"gameCanvas";
+			this->gameCanvas->Size = System::Drawing::Size(400, 400);
+			this->gameCanvas->TabIndex = 4;
+			this->gameCanvas->TabStop = false;
+			this->gameCanvas->Paint += gcnew System::Windows::Forms::PaintEventHandler(this, &GUI::OnDraw);
+			// 
+			// lblScore
+			// 
+			this->lblScore->AutoSize = true;
+			this->lblScore->Font = (gcnew System::Drawing::Font(L"Consolas", 14.25F, System::Drawing::FontStyle::Bold));
+			this->lblScore->Location = System::Drawing::Point(16, 13);
+			this->lblScore->Name = L"lblScore";
+			this->lblScore->Size = System::Drawing::Size(116, 28);
+			this->lblScore->TabIndex = 3;
+			this->lblScore->Text = L"Score: 0";
+			// 
+			// pnlMenu
+			// 
+			this->pnlMenu->Controls->Add(this->btnExit);
+			this->pnlMenu->Controls->Add(this->btnExtras);
+			this->pnlMenu->Controls->Add(this->btnStart);
+			this->pnlMenu->Controls->Add(this->lblTitle);
+			this->pnlMenu->Location = System::Drawing::Point(100, 80);
+			this->pnlMenu->Name = L"pnlMenu";
+			this->pnlMenu->Size = System::Drawing::Size(240, 250);
+			this->pnlMenu->TabIndex = 2;
+			// 
+			// btnExit
+			// 
+			this->btnExit->Location = System::Drawing::Point(70, 160);
+			this->btnExit->Name = L"btnExit";
+			this->btnExit->Size = System::Drawing::Size(100, 30);
+			this->btnExit->TabIndex = 0;
+			this->btnExit->Text = L"Exit";
+			this->btnExit->Click += gcnew System::EventHandler(this, &GUI::btnExit_Click);
+			// 
+			// btnExtras
+			// 
+			this->btnExtras->Location = System::Drawing::Point(70, 110);
+			this->btnExtras->Name = L"btnExtras";
+			this->btnExtras->Size = System::Drawing::Size(100, 30);
+			this->btnExtras->TabIndex = 1;
+			this->btnExtras->Text = L"Extras";
+			this->btnExtras->Click += gcnew System::EventHandler(this, &GUI::btnExtras_Click);
+			// 
+			// btnStart
+			// 
+			this->btnStart->Location = System::Drawing::Point(70, 60);
+			this->btnStart->Name = L"btnStart";
+			this->btnStart->Size = System::Drawing::Size(100, 30);
+			this->btnStart->TabIndex = 2;
+			this->btnStart->Text = L"Start Game";
+			this->btnStart->Click += gcnew System::EventHandler(this, &GUI::btnStart_Click);
+			// 
+			// lblTitle
+			// 
+			this->lblTitle->Font = (gcnew System::Drawing::Font(L"Segoe UI", 20, System::Drawing::FontStyle::Bold));
+			this->lblTitle->Location = System::Drawing::Point(0, 10);
+			this->lblTitle->Name = L"lblTitle";
+			this->lblTitle->Size = System::Drawing::Size(240, 40);
+			this->lblTitle->TabIndex = 3;
+			this->lblTitle->Text = L"S N A K E";
+			this->lblTitle->TextAlign = System::Drawing::ContentAlignment::MiddleCenter;
+			// 
+			// pnlExtras
+			// 
+			this->pnlExtras->Controls->Add(this->btnBack);
+			this->pnlExtras->Controls->Add(this->chkWrap);
+			this->pnlExtras->Controls->Add(this->chkEnhanced);
+			this->pnlExtras->Controls->Add(this->chkSpeedFood);
+			this->pnlExtras->Controls->Add(this->chkPortals);
+			this->pnlExtras->Controls->Add(this->chkchristmas);
+			this->pnlExtras->Location = System::Drawing::Point(100, 80);
+			this->pnlExtras->Name = L"pnlExtras";
+			this->pnlExtras->Size = System::Drawing::Size(240, 250);
+			this->pnlExtras->TabIndex = 1;
+			this->pnlExtras->Visible = false;
+			// 
+			// btnBack
+			// 
+			this->btnBack->Location = System::Drawing::Point(70, 200);
+			this->btnBack->Name = L"btnBack";
+			this->btnBack->Size = System::Drawing::Size(100, 30);
+			this->btnBack->TabIndex = 0;
+			this->btnBack->Text = L"Back";
+			this->btnBack->Click += gcnew System::EventHandler(this, &GUI::btnBack_Click);
+			// 
+			// chkWrap
+			// 
+			this->chkWrap->Checked = true;
+			this->chkWrap->CheckState = System::Windows::Forms::CheckState::Checked;
+			this->chkWrap->Location = System::Drawing::Point(50, 130);
+			this->chkWrap->Name = L"chkWrap";
+			this->chkWrap->Size = System::Drawing::Size(104, 24);
+			this->chkWrap->TabIndex = 1;
+			this->chkWrap->Text = L"Wrap Mode";
+			// 
+			// chkEnhanced
+			// 
+			this->chkEnhanced->Checked = true;
+			this->chkEnhanced->CheckState = System::Windows::Forms::CheckState::Checked;
+			this->chkEnhanced->Location = System::Drawing::Point(50, 95);
+			this->chkEnhanced->Name = L"chkEnhanced";
+			this->chkEnhanced->Size = System::Drawing::Size(104, 24);
+			this->chkEnhanced->TabIndex = 2;
+			this->chkEnhanced->Text = L"Enhanced Food";
+			// 
+			// chkSpeedFood
+			// 
+			this->chkSpeedFood->Checked = true;
+			this->chkSpeedFood->CheckState = System::Windows::Forms::CheckState::Checked;
+			this->chkSpeedFood->Location = System::Drawing::Point(50, 60);
+			this->chkSpeedFood->Name = L"chkSpeedFood";
+			this->chkSpeedFood->Size = System::Drawing::Size(104, 24);
+			this->chkSpeedFood->TabIndex = 3;
+			this->chkSpeedFood->Text = L"Speed Food";
+			// 
+			// chkPortals
+			// 
+			this->chkPortals->Checked = true;
+			this->chkPortals->CheckState = System::Windows::Forms::CheckState::Checked;
+			this->chkPortals->Location = System::Drawing::Point(50, 25);
+			this->chkPortals->Name = L"chkPortals";
+			this->chkPortals->Size = System::Drawing::Size(104, 24);
+			this->chkPortals->TabIndex = 4;
+			this->chkPortals->Text = L"Portals";
+			//
+			// chkChristmas
+			// 
+			this->chkchristmas->Checked = true;
+			this->chkchristmas->CheckState = System::Windows::Forms::CheckState::Unchecked;
+			this->chkchristmas->Location = System::Drawing::Point(50, 165);
+			this->chkchristmas->Name = L"chkChristmas";
+			this->chkchristmas->Size = System::Drawing::Size(104, 24);
+			this->chkchristmas->TabIndex = 4;
+			this->chkchristmas->Text = L"Christmas";
+			// 
+			// lblGameOver
+			// 
+			this->lblGameOver->AutoSize = true;
+			this->lblGameOver->BackColor = System::Drawing::Color::Black;
+			this->lblGameOver->Font = (gcnew System::Drawing::Font(L"Impact", 36));
+			this->lblGameOver->ForeColor = System::Drawing::Color::Crimson;
+			this->lblGameOver->Location = System::Drawing::Point(85, 200);
+			this->lblGameOver->Name = L"lblGameOver";
+			this->lblGameOver->Size = System::Drawing::Size(294, 75);
+			this->lblGameOver->TabIndex = 0;
+			this->lblGameOver->Text = L"GAME OVER";
+			this->lblGameOver->Visible = false;
+			// 
+			// GUI
+			// 
+			this->ClientSize = System::Drawing::Size(444, 481);
+			this->Controls->Add(this->lblGameOver);
+			this->Controls->Add(this->pnlExtras);
+			this->Controls->Add(this->pnlMenu);
+			this->Controls->Add(this->lblScore);
+			this->Controls->Add(this->gameCanvas);
+			this->DoubleBuffered = true;
+			this->KeyPreview = true;
+			this->Name = L"GUI";
+			this->Text = L"Snake Pro";
+			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->gameCanvas))->EndInit();
+			this->pnlMenu->ResumeLayout(false);
+			this->pnlExtras->ResumeLayout(false);
+			this->ResumeLayout(false);
+			this->PerformLayout();
+
+		}
+#pragma endregion
+
+		void InitializeGame() {
+			mods = gcnew GameModifiers();
+			rand = gcnew Random();
+			snake = gcnew array<int, 2>(200, 2);
+			ResetGame();
+		}
+
+		void ResetGame() {
+			isGameRunning = false;
+			score = 0;
+			snakeLength = 3;
+			currentDir = Direction::Stop;
+			nextDir = Direction::Stop;
+
+			
+			SpeedTimer->Stop();
+			portalTimer->Stop();
+			SpeedBoostActice = false;
+			portalsActive = false;
+
+			
+			snake[0, 0] = 3; snake[0, 1] = 5; 
+			snake[1, 0] = 2; snake[1, 1] = 5;
+			snake[2, 0] = 1; snake[2, 1] = 5;
+
+			mods->portals = chkPortals->Checked;
+			mods->speedFood = chkSpeedFood->Checked;
+			mods->enhancedFood = chkEnhanced->Checked;
+			mods->wrapMode = chkWrap->Checked;
+			mods->christmas = chkchristmas->Checked;
+
+			SpawnFood();
+			SpawnPortals();
+			
+			lblGameOver->Visible = false;
+		}
+
+		void SpawnFood() {
+			bool valid = false;
+			while (!valid) {
+				foodX = rand->Next(0, WIDTH);
+				foodY = rand->Next(0, HEIGHT);
+				valid = true;
+				for (int i = 0; i < snakeLength; i++) {
+					if (snake[i, 0] == foodX && snake[i, 1] == foodY) { valid = false; break; }
+					if(portal1X == foodX && portal1Y == foodY || portal2X == foodX && portal2Y == foodY) { valid = false; break;}
+				}
+			}
+			int chance = rand->Next(0, 100);               //chances { % }
+			if (mods->speedFood && chance > 80) foodType = 2;
+			else if (mods->enhancedFood && chance > 40) foodType = 1;
+			else foodType = 0;
+		}
+
+		void SpawnPortals() {
+			if (!mods->portals) return;
+
+		
+			if (portalsActive) return;
+
+			// 30% Chance to Spawn
+			if (rand->Next(0, 100) < 30) { //chances { % }
+				bool v1 = false, v2 = false;
+				while (!v1) {
+					portal1X = rand->Next(0, WIDTH); portal1Y = rand->Next(0, HEIGHT);
+					v1 = true;
+					for (int i = 0; i < snakeLength; i++) if (snake[i, 0] == portal1X && snake[i, 1] == portal1Y) v1 = false;
+					if (portal1X == foodX && portal1Y == foodY) v1 = false;
+				}
+				while (!v2) {
+					portal2X = rand->Next(0, WIDTH); portal2Y = rand->Next(0, HEIGHT);
+					v2 = true;
+					if (portal2X == portal1X && portal2Y == portal1Y) v2 = false;
+					for (int i = 0; i < snakeLength; i++) if (snake[i, 0] == portal2X && snake[i, 1] == portal2Y) v2 = false;
+					if (portal2X == foodX && portal2Y == foodY) v2 = false;
+				}
+
+				
+				portalsActive = true;
+				portalTimer->Start();
+			}
+		}
+
+		
+		void OnPortalTimerTick(System::Object^ sender, System::EventArgs^ e) {
+			
+			if (snake[0, 0] == portal1X && snake[0, 1] == portal1Y) return;
+			if (snake[0, 0] == portal2X && snake[0, 1] == portal2Y) return;
+
+			portalsActive = false;
+			portalTimer->Stop();
+		}
+
+		void SpeedBoostTimer(System::Object^ sender, System::EventArgs^ e) {
+		
+			SpeedTimer->Stop();
+			SpeedBoostActice = false;
+		}
+
+		void GameTick(System::Object^ sender, System::EventArgs^ e) {
+			if (nextDir != Direction::Stop) { currentDir = nextDir; nextDir = Direction::Stop; }
+			if (currentDir == Direction::Stop) return;
+
+			for (int i = snakeLength - 1; i > 0; i--) {
+				snake[i, 0] = snake[i - 1, 0];
+				snake[i, 1] = snake[i - 1, 1];
+			}
+
+			if (currentDir == Direction::Up) snake[0, 1]--;
+			else if (currentDir == Direction::Down) snake[0, 1]++;
+			else if (currentDir == Direction::Left) snake[0, 0]--;
+			else if (currentDir == Direction::Right) snake[0, 0]++;
+
+			if (mods->wrapMode) {
+				if (snake[0, 0] < 0) snake[0, 0] = WIDTH - 1;
+				if (snake[0, 0] >= WIDTH) snake[0, 0] = 0;
+				if (snake[0, 1] < 0) snake[0, 1] = HEIGHT - 1;
+				if (snake[0, 1] >= HEIGHT) snake[0, 1] = 0;
+			}
+			else if (snake[0, 0] < 0 || snake[0, 0] >= WIDTH || snake[0, 1] < 0 || snake[0, 1] >= HEIGHT) {
+				GameOver(); return;
+			}
+			
+			CheckCollisions();
+			gameCanvas->Invalidate();
+			
+			lblScore->Text = "Score: " + score;
+		}
+
+		void CheckCollisions() {
+			for (int i = 1; i < snakeLength; i++) {
+				if (snake[i, 0] == snake[0, 0] && snake[i, 1] == snake[0, 1]) { GameOver(); return; }
+			}
+			if (snake[0, 0] == foodX && snake[0, 1] == foodY) {
+				if (foodType == 0) { score += 5; snakeLength++; lastfoodeaten = 0; }
+				else if (foodType == 1) { score += 10; snakeLength += 2; lastfoodeaten = 1; }
+				else if (foodType == 2) {
+
+					score += 5;
+					snakeLength++;
+					lastfoodeaten = 2;
+					SpeedBoostActice = true;
+					SpeedTimer->Start();
+				}
+
+				
+				SpawnFood();
+				SpawnPortals();
+			}
+			if (portalsActive) {
+				if (snake[0, 0] == portal1X && snake[0, 1] == portal1Y) { snake[0, 0] = portal2X; snake[0, 1] = portal2Y; }
+				else if (snake[0, 0] == portal2X && snake[0, 1] == portal2Y) { snake[0, 0] = portal1X; snake[0, 1] = portal1Y; }
+			}
+		}
+
+		void GameOver() {
+			game_over = true;
+			gameTimer->Stop();
+			portalTimer->Stop(); 
+			SpeedTimer->Stop();
+			isGameRunning = false;
+			lblGameOver->Visible = true;
+			lblGameOver->BringToFront();
+			Timer^ t = gcnew Timer();
+			t->Interval = 1000;
+			t->Tick += gcnew EventHandler(this, &GUI::ReturnToMenu);
+			t->Start();
+		}
+
+		void ReturnToMenu(Object^ sender, EventArgs^ e) {
+			game_over = false;
+			((Timer^)sender)->Stop();
+			pnlMenu->Visible = true;
+			lblGameOver->Visible = false;
+		}
+
+		GraphicsPath^ GetRoundedRect(Rectangle rect, int radius) {
+			GraphicsPath^ path = gcnew GraphicsPath();
+			int d = radius * 2;
+			path->AddArc(rect.X, rect.Y, d, d, 180, 90);
+			path->AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+			path->AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+			path->AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+			path->CloseFigure();
+			return path;
+
+		}
+
+		void DrawSantaHat(Graphics^ g, int x, int y) {
+			Point pt1 = Point(x + 5, y + 10);
+			Point pt2 = Point(x + 35, y + 10);
+			Point pt3 = Point(x + 20, y - 10);
+			array<Point>^ hatPoints = { pt1, pt2, pt3 };
+			g->FillPolygon(Brushes::Crimson, hatPoints);
+			g->FillRectangle(Brushes::White, x + 5, y + 8, 30, 4);
+			g->FillEllipse(Brushes::White, x + 16, y - 15, 10, 8);
+		}
+
+		void OnDraw(System::Object^ sender, System::Windows::Forms::PaintEventArgs^ e) {
+
+
+
+			if (mods->christmas) {
+				gameCanvas->BackColor = Color::FromArgb(5, 15, 30);
+			}
+
+			if (SpeedBoostActice) {
+				gameTimer->Interval = 150;
+			}
+			else
+			{
+				gameTimer->Interval = 400;
+			}
+
+
+			Graphics^ g = e->Graphics;
+			g->SmoothingMode = SmoothingMode::AntiAlias;
+
+
+			/*Pen^ gp = gcnew Pen(Color::FromArgb(30, 30, 30));
+			for (int x = 0; x <= WIDTH; x++) g->DrawLine(gp, x * CELL_SIZE, 0, x * CELL_SIZE, HEIGHT * CELL_SIZE);
+			for (int y = 0; y <= HEIGHT; y++) g->DrawLine(gp, 0, y * CELL_SIZE, WIDTH * CELL_SIZE, y * CELL_SIZE);*/
+
+			
+
+			// --- 3D APPLE RENDERING ---
+			int fx = foodX * CELL_SIZE; int fy = foodY * CELL_SIZE;
+
+			if (!mods->christmas)
+			{
+				g->DrawCurve(gcnew Pen(Color::SaddleBrown, 3), gcnew array<Point>{Point(fx + 20, fy + 12), Point(fx + 22, fy + 2)});
+				g->FillEllipse(Brushes::ForestGreen, fx + 22, fy + 4, 10, 5);
+				Color pCol = (foodType == 1) ? Color::Gold : (foodType == 2 ? Color::Cyan : Color::Crimson);
+				Color dCol = (foodType == 1) ? Color::DarkGoldenrod : (foodType == 2 ? Color::DarkCyan : Color::DarkRed);
+				Rectangle fr = Rectangle(fx + 6, fy + 10, CELL_SIZE - 12, CELL_SIZE - 14);
+				LinearGradientBrush^ ab = gcnew LinearGradientBrush(fr, pCol, dCol, 90.0f);
+				g->FillEllipse(ab, fr);
+				g->FillEllipse(gcnew SolidBrush(Color::FromArgb(180, Color::White)), fx + 12, fy + 14, 8, 5);
+			}
+			else
+			{
+				if (foodType == 0) { // Snowball
+					Rectangle snowRect = Rectangle(fx + 6, fy + 6, 30, 28);
+
+					Color topColor = Color::White;
+					Color bottomColor = Color::FromArgb(90, 105, 105);
+
+					LinearGradientBrush^ snowBrush = gcnew LinearGradientBrush(snowRect, topColor, bottomColor, 90.0f);
+
+					g->FillEllipse(snowBrush, snowRect);
+					delete snowBrush;
+				}
+				else { // Gift
+					Color giftCol = (foodType == 2) ? Color::RoyalBlue : Color::Gold;
+					Color ribCol = (foodType == 2) ? Color::White : Color::Crimson;
+					g->FillRectangle(gcnew SolidBrush(giftCol), fx + 8, fy + 10, 24, 24);
+					g->DrawLine(gcnew Pen(ribCol, 5), fx + 18, fy + 10, fx + 18, fy + 34);
+					g->DrawLine(gcnew Pen(ribCol, 4), fx + 8, fy + 20, fx + 32, fy + 20);
+				}
+
+			}
+
+			if (portalsActive) {
+				g->DrawEllipse(gcnew Pen(Color::MediumPurple, 4), portal1X * CELL_SIZE + 7, portal1Y * CELL_SIZE + 4, CELL_SIZE - 14, CELL_SIZE - 8);
+				g->DrawEllipse(gcnew Pen(Color::Orange, 4), portal2X * CELL_SIZE + 7, portal2Y * CELL_SIZE + 4, CELL_SIZE - 14, CELL_SIZE - 8);
+			}
+
+			// --- SMOOTH SNAKE RENDERING ---
+			for (int i = 0; i < snakeLength; i++) {
+				int sx = snake[i, 0] * CELL_SIZE; int sy = snake[i, 1] * CELL_SIZE;
+				Rectangle r = Rectangle(sx + 2, sy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+				if (i == 0) {
+
+					if (SpeedBoostActice) {
+					
+						LinearGradientBrush^ hb = gcnew LinearGradientBrush(r, Color::LightBlue, Color::Blue, 45.0f);
+						g->FillPath(hb, GetRoundedRect(r, 12));
+					}
+					else
+					{
+						
+						LinearGradientBrush^ hb = gcnew LinearGradientBrush(r, Color::Lime, Color::ForestGreen, 45.0f);
+						g->FillPath(hb, GetRoundedRect(r, 12));
+					}
+
+					//eye
+					if (lastfoodeaten == 1) {
+						g->FillEllipse(Brushes::Gold, sx + 10, sy + 10, 10, 10);
+						g->FillEllipse(Brushes::Gold, sx + 22, sy + 10, 10, 10);
+					}
+					else
+					{
+						g->FillEllipse(Brushes::White, sx + 10, sy + 10, 10, 10);
+						g->FillEllipse(Brushes::White, sx + 22, sy + 10, 10, 10);
+					}
+					g->FillEllipse(Brushes::Black, sx + 13, sy + 13, 3, 3);
+					g->FillEllipse(Brushes::Black, sx + 25, sy + 13, 3, 3);
+
+				}
+				else {
+					
+					int taper = (i > 15) ? 10 : (i / 2);
+					Rectangle br = Rectangle(sx + 2 + taper, sy + 2 + taper, CELL_SIZE - 4 - (taper * 2), CELL_SIZE - 4 - (taper * 2));
+					int gVal = 225 - (i * 5 > 150 ? 150 : i * 5);
+
+					if (SpeedBoostActice) {
+				
+						g->FillPath(gcnew SolidBrush(Color::FromArgb(100, 158, gVal)), GetRoundedRect(br, 8));
+					}
+					else
+					{
+						
+						g->FillPath(gcnew SolidBrush(Color::FromArgb(0, gVal, 0)), GetRoundedRect(br, 8));
+					}
+
+					if (mods->christmas) {
+
+						int hatx = snake[0, 0] * CELL_SIZE;
+						int haty = snake[0, 1] * CELL_SIZE;
+						DrawSantaHat(g, hatx, haty);
+					}
+				}
+			}
+		}
+
+		void btnStart_Click(System::Object^ sender, System::EventArgs^ e) { pnlMenu->Visible = false; ResetGame(); this->Focus(); }
+		void btnExtras_Click(System::Object^ sender, System::EventArgs^ e) { pnlMenu->Visible = false; pnlExtras->Visible = true; }
+		void btnBack_Click(System::Object^ sender, System::EventArgs^ e) { pnlExtras->Visible = false; pnlMenu->Visible = true; }
+		void btnExit_Click(System::Object^ sender, System::EventArgs^ e) { Application::Exit(); }
+	};
+}

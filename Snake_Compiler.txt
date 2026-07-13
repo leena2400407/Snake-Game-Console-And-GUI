@@ -1,0 +1,617 @@
+#include <iostream>
+#include <iomanip>
+#include <Windows.h>
+#include <conio.h>
+
+using namespace std;
+
+int globals_gamemode = 1;
+
+enum code {
+	display,
+	snake,
+	food,
+};
+
+
+struct GameModifiers
+{
+	bool portals = true;
+	bool speedFood = true;
+	bool enhancedFood = true;
+	bool wrapMode = true;
+};
+
+void ShowStartMenu();
+int  SelectGameMode(GameModifiers& mods);
+void ShowExtrasStartMenu(GameModifiers& mods);
+void ShowGameOverMenu(int score);
+
+void ShowStartMenu() {
+	system("cls");
+	cout << "\n\n   --- S N A K E ---\n";
+	cout << "   1. Start (Manual)\n";
+	cout << "   2. Extras\n";
+	cout << "   3. Exit\n";
+	cout << "\n   Select: ";
+}
+
+int SelectGameMode(GameModifiers& mods)
+{
+	int choice;
+	cin >> choice;
+
+	switch (choice)
+	{
+	case 1:
+		return 1;
+
+	case 2:
+		globals_gamemode = 0;
+		ShowExtrasStartMenu(mods);
+
+		if (globals_gamemode == 1)
+			return globals_gamemode;
+
+		ShowStartMenu();
+		return SelectGameMode(mods);
+
+	case 3:
+		exit(0);
+		
+
+	default:
+		cout << "\nInvalid choice.\n";
+		Sleep(400);
+		return SelectGameMode(mods);
+	}
+}
+
+
+void ShowGameOverMenu(int score) {
+	system("cls");
+	cout << "\n\n   --- GAME OVER ---\n";
+	cout << "   Final Score: " << score << endl << endl;
+	system("pause");
+}
+
+void ShowExtrasStartMenu(GameModifiers& mods)
+{
+	int choice = 0;
+
+	while (true)
+	{
+		system("cls");
+		cout << "\n\n   --- EXTRAS MENU ---\n\n";
+
+		cout << "   1. Portals:          " << (mods.portals ? "ON" : "OFF") << "\n";
+		cout << "   2. Speed Food:       " << (mods.speedFood ? "ON" : "OFF") << "\n";
+		cout << "   3. Enhanced Food:    " << (mods.enhancedFood ? "ON" : "OFF") << "\n";
+		cout << "   4. Wrap Mode:        " << (mods.wrapMode ? "ON" : "OFF") << "\n";
+		cout << "   5. Play Manual\n";
+		cout << "   6. Back\n\n";
+
+		cout << "   Select: ";
+		cin >> choice;
+
+		if (choice >= 1 && choice <= 4)
+		{
+			switch (choice)
+			{
+			case 1: mods.portals = !mods.portals; break;
+			case 2: mods.speedFood = !mods.speedFood; break;
+			case 3: mods.enhancedFood = !mods.enhancedFood; break;
+			case 4: mods.wrapMode = !mods.wrapMode; break;
+			}
+			continue;
+		}
+
+		if (choice == 5) { globals_gamemode = 1; return; }
+		if (choice == 6) { return; }
+
+		cout << "\nInvalid choice.\n";
+	}
+
+}
+
+
+void table(char mat[10][10][3], int score)
+{
+	cout << "Score: " << score << endl;
+	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			cout << "[ ";
+			if (mat[i][j][food] == 'Y')
+			{
+				SetConsoleTextAttribute(hConsole, 6);//yellow
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);//white
+			}
+			else if (mat[i][j][food] == 'B')
+			{
+				SetConsoleTextAttribute(hConsole, 11);//blue
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);
+			}
+			else if (mat[i][j][food] == '(')
+			{
+				SetConsoleTextAttribute(hConsole, 14);//yellow
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);
+			}
+			else if (mat[i][j][food] == ')')
+			{
+				SetConsoleTextAttribute(hConsole, 9);//blue
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);
+			}
+			else if (mat[i][j][food] == 'F')
+			{
+				SetConsoleTextAttribute(hConsole, 4);//red
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);
+			}
+			else if (mat[i][j][snake] == 'H')
+			{
+				SetConsoleTextAttribute(hConsole, 2);//Dark Green
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);//white
+			}
+			else if (mat[i][j][snake] == 'T' || mat[i][j][snake] == 'B')
+			{
+				SetConsoleTextAttribute(hConsole, 10);//Green
+				cout << mat[i][j][display];
+				SetConsoleTextAttribute(hConsole, 7);
+			}
+			else
+			{
+				cout << mat[i][j][display];
+			}
+
+			cout << " ]";
+		}
+		cout << endl;
+	}
+	cout << endl;
+
+}
+
+
+void snakelength(char mat[10][10][3], int& Slength, int PX[], int PY[], char movedirection, GameModifiers& mods, bool& hitwall)
+{
+
+	int newX = PX[0], newY = PY[0];
+	switch (movedirection)
+	{
+	case 'a': newX--; break;
+	case 's': newY++; break;
+	case 'w': newY--; break;
+	case 'd': newX++; break;
+	}
+
+	if (mods.wrapMode == true)
+	{
+		if (newX < 0) {
+			newX = 9;
+		}
+		else if (newX > 9) {
+			newX = 0;
+		}
+		if (newY < 0) {
+			newY = 9;
+		}
+		else if (newY > 9) {
+			newY = 0;
+		}
+	}
+	else
+	{
+		if (PX[0] < 0) {
+			hitwall = true;
+		}
+		else if (PX[0] > 9) {
+			hitwall = true;
+		}
+		if (PY[0] < 0) {
+			hitwall = true;
+		}
+		else if (PY[0] > 9) {
+			hitwall = true;
+		}
+	}
+
+	
+	for (int i = Slength - 1; i > 0; --i)
+	{
+		PX[i] = PX[i - 1];
+		PY[i] = PY[i - 1];
+	}
+
+	PX[0] = newX;
+	PY[0] = newY;
+
+	
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			mat[i][j][snake] = 'E';
+		}
+	}
+
+										
+	for (int i = 0; i < Slength; i++)
+	{
+		int sx = PX[i], sy = PY[i];
+		if (i == 0)
+		{
+			mat[sy][sx][snake] = 'H';  
+		}
+		else if (i == Slength - 1)
+		{
+			mat[sy][sx][snake] = 'T';  
+		}
+		else
+		{
+			mat[sy][sx][snake] = 'B';  
+		}
+	}
+}
+
+void foodspawn(char mat[10][10][3], int& timer, GameModifiers& mods)
+{
+	int BPX, BPY, OPX, OPY, portalcount = 0;
+	bool checkuse = false;
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			if ((mat[i][j][food] == ')' || mat[i][j][food] == '(') && (mat[i][j][snake] == 'H'))
+			{
+				checkuse = true;
+			}
+		}
+	}
+
+	if (timer >= 50 && checkuse == false)
+	{
+		for (int i = 0; i < 10; i++)
+		{
+			for (int j = 0; j < 10; j++)
+			{
+				if (mat[i][j][food] == ')' || mat[i][j][food] == '(')
+				{
+					mat[i][j][food] = 'E';
+				}
+			}
+		}
+	}
+
+
+	
+		while (true)
+		{
+			int foodtype = rand() % 100;
+			int RNGx = rand() % 10;
+			int RNGy = rand() % 10;
+
+			if (foodtype <= 50)
+			{
+				if (mat[RNGy][RNGx][snake] == 'E' && mat[RNGy][RNGx][food] == 'E')
+				{
+					mat[RNGy][RNGx][food] = 'F'; 
+					break;
+				}
+			}
+			else if ((foodtype > 50 && foodtype < 80) && mods.enhancedFood == true) 
+			{
+				if (mat[RNGy][RNGx][snake] == 'E' && mat[RNGy][RNGx][food] == 'E')
+				{
+					mat[RNGy][RNGx][food] = 'Y'; 
+					break;
+				}
+			}
+			else 
+			{
+				if ((mat[RNGy][RNGx][snake] == 'E' && mat[RNGy][RNGx][food] == 'E') && mods.speedFood == true)
+				{
+					mat[RNGy][RNGx][food] = 'B';
+					break;
+				}
+			}
+		}
+
+	
+
+	portalcount = 0;
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			if (mat[i][j][food] == '(')
+			{
+				portalcount++;
+			}
+		}
+	}
+
+	if ((rand() % 100 <= 15 && portalcount < 1) && mods.portals == true)
+	{
+		bool check = false;
+
+		while (true)
+		{
+			BPX = rand() % 10;
+			BPY = rand() % 10;
+			OPX = rand() % 10;
+			OPY = rand() % 10;
+
+			if (!check)
+			{
+				if (mat[BPY][BPX][snake] == 'E' && mat[BPY][BPX][food] == 'E')
+				{
+					timer = 0;
+					mat[BPY][BPX][food] = ')'; 
+					check = true;
+				}
+			}
+			else
+			{
+				if (mat[OPY][OPX][snake] == 'E' && mat[OPY][OPX][food] == 'E')
+				{
+					mat[OPY][OPX][food] = '('; 
+					break;
+				}
+			}
+		}
+	}
+}
+
+
+void eating(char mat[10][10][3], int& Slength, bool& gamespeed, int PY[], int PX[], int& score)
+{
+
+	int BPX = 0, BPY = 0, OPX = 0, OPY = 0;
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			if (mat[i][j][food] == ')')
+			{
+				BPX = i;
+				BPY = j;
+			}
+
+			if (mat[i][j][food] == '(')
+			{
+				OPX = i;
+				OPY = j;
+			}
+		}
+	}
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			if (mat[i][j][food] == 'F' && mat[i][j][snake] == 'H')
+			{
+				mat[i][j][food] = 'E';
+				Slength++;
+				score = score + 5;
+			}
+			else if (mat[i][j][food] == 'Y' && mat[i][j][snake] == 'H')
+			{
+				mat[i][j][food] = 'E';
+				Slength = Slength + 2;
+				score = score + 10;
+			}
+			else if (mat[i][j][food] == 'B' && mat[i][j][snake] == 'H')
+			{
+				mat[i][j][food] = 'E';
+				Slength++;
+				gamespeed = true;
+				score = score + 5;
+			}
+			else if (mat[i][j][food] == '(' && mat[i][j][snake] == 'H')
+			{
+				PX[0] = BPX;
+				PY[0] = BPY;
+				score = score + (Slength);
+			}
+			else if (mat[i][j][food] == ')' && mat[i][j][snake] == 'H')
+			{
+				PX[0] = OPX;
+				PY[0] = OPY;
+				score = score + (Slength);
+			}
+
+		}
+	}
+}
+
+
+char checkgameresult(char mat[10][10][3], int PX[], int PY[], int Slength, bool hitwall)
+{
+	
+	for (int i = 1; i < Slength; i++)
+	{
+		if (PX[i] == PX[0] && PY[i] == PY[0])
+		{
+			return 'L'; 
+		}
+	}
+
+	if (hitwall) {
+		return 'L';
+	}
+
+	
+	if (Slength > 97)
+	{
+		return 'W'; 
+
+	}
+
+	return 'C';
+}
+
+int main()
+{
+	srand(time(0));
+
+	
+	GameModifiers mods;
+	int gamemode;
+
+	ShowStartMenu();
+	gamemode = SelectGameMode(mods);
+	system("cls");
+
+	
+	char mat[10][10][3];
+	char input = '1', movedirection = 's', gamestate = 'C';
+	int Slength = 2, counter = 0, timer = 0, score = 0;
+	bool start = false, gamespeed = false;
+	bool showStartHint = true;
+	bool hitwall = false;
+	int PX[200] = { 0 };
+	int PY[200] = { 0 };
+
+	
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 10; j++)
+		{
+			mat[i][j][snake] = 'E';  
+			mat[i][j][display] = ' '; 
+			mat[i][j][food] = 'E';    
+		}
+	}
+
+	
+	PX[0] = 1; PY[0] = 2; 
+	PX[1] = 0; PY[1] = 2;
+	mat[PY[0]][PX[0]][snake] = 'H';
+	mat[PY[1]][PX[1]][snake] = 'T';
+
+	
+	while (gamestate == 'C') {
+
+		if (!start && showStartHint) {
+			system("cls");
+			cout << "Press W, A, S or D to start...\n";
+			Sleep(800);
+			showStartHint = false;
+		}
+
+		int foodcount = 0;
+
+		for (int i = 0; i < 10; i++)
+		{
+			for (int j = 0; j < 10; j++)
+			{
+				if (mat[i][j][food] == 'F' || mat[i][j][food] == 'Y' || mat[i][j][food] == 'B')
+					foodcount++;
+			}
+		}
+
+		
+		if (_kbhit())
+		{
+			input = _getch();
+			input = tolower(input);
+
+			char newDirection = movedirection; 
+
+			if (input == 'a' || input == 'd' || input == 'w' || input == 's')
+			{
+				
+				bool isValidMove = false;
+
+				if (input == 'a' && movedirection != 'd')      
+					isValidMove = true;
+				else if (input == 'd' && movedirection != 'a') 
+					isValidMove = true;
+				else if (input == 'w' && movedirection != 's') 
+					isValidMove = true;
+				else if (input == 's' && movedirection != 'w') 
+					isValidMove = true;
+
+				if (isValidMove)
+				{
+					movedirection = input;
+					start = true;
+				}
+
+			}
+		}
+
+		
+		if (start)
+		{
+			
+			snakelength(mat, Slength, PX, PY, movedirection, mods, hitwall);
+
+			
+			eating(mat, Slength, gamespeed, PX, PY, score);
+
+			
+			int spawnpercentage = 1 + rand() % 100;
+			if (spawnpercentage < 20 && foodcount < 1)
+				foodspawn(mat, timer, mods);
+
+			
+			for (int i = 0; i < 10; i++)
+			{
+				for (int j = 0; j < 10; j++)
+				{
+					if (mat[i][j][snake] == 'H')
+						mat[i][j][display] = '@';       
+					else if (mat[i][j][snake] == 'T' || mat[i][j][snake] == 'B')
+						mat[i][j][display] = 'o';        
+					else if (mat[i][j][food] == 'F' || mat[i][j][food] == 'B' || mat[i][j][food] == 'Y')
+						mat[i][j][display] = '*';       
+					else if (mat[i][j][food] == '(')     
+						mat[i][j][display] = 'O';       
+					else if (mat[i][j][food] == ')')     
+						mat[i][j][display] = 'O';       
+					else
+						mat[i][j][display] = ' ';     
+				}
+			}
+
+			
+			table(mat, score);
+
+			
+			gamestate = checkgameresult(mat, PX, PY, Slength, hitwall);
+
+
+			if (!gamespeed) {
+				Sleep(400);
+				counter = 0;
+			}
+			else {
+				Sleep(200);
+				counter++;
+				counter < 20 ? gamespeed = true : gamespeed = false;
+			}
+
+
+			
+			timer++;
+
+			system("cls");
+
+		}
+	}
+
+	ShowGameOverMenu(score);
+
+}
