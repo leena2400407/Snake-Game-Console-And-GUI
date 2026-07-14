@@ -13,7 +13,6 @@ enum code {
 	food,
 };
 
-
 struct GameModifiers
 {
 	bool portals = true;
